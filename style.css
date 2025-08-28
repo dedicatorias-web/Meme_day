@@ -1,1 +1,67 @@
 
+body {
+  font-family: 'Segoe UI', sans-serif;
+  margin: 0;
+  background: #fdfdfd;
+  color: #333;
+}
+
+header {
+  background: #ff3366;
+  color: white;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.tagline {
+  font-style: italic;
+  margin-top: -0.5rem;
+}
+
+main {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.titulo-noticia {
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.resumo-noticia {
+  font-size: 1rem;
+  color: #555;
+}
+
+.imagem-dia {
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.imagem-dia img {
+  max-width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+.link-fonte {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: #ff3366;
+  color: white;
+  border-radius: 4px;
+  text-decoration: none;
+}
+
+.link-fonte:hover {
+  background: #e42d5b;
+}
+
+footer {
+  background: #222;
+  color: #aaa;
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.9rem;
+}
