@@ -5,6 +5,8 @@ const CONFIG = {
   proxies: [
     { name: 'AllOrigins', url: (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}` },
     { name: 'CORS Proxy', url: (target) => `https://corsproxy.io/?${encodeURIComponent(target)}` },
+    { name: 'ProxyServer', url: (target) => `https://proxy.cors.sh/?url=${encodeURIComponent(target)}` },
+    { name: 'Heroku Proxy', url: (target) => `https://cors-anywhere.herokuapp.com/${target}` },
   ],
   fontesNoticias: [
     { nome: 'Google News BR', url: 'https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419', tipo: 'rss' },
@@ -27,13 +29,12 @@ const CONFIG = {
     placeholder: 'data:image/svg+xml,...' // SVG base64 para placeholder
   },
   seletoresDOM: {
-    titulo: '[data-element="titulo"]',
-    resumo: '[data-element="resumo"]',
-    fonte: '[data-element="fonte"]',
-    imagem: '[data-element="imagem"]',
-    erro: '[data-element="erro"]',
-    carregando: '[data-element="carregando"]'
+    /* ... (mesmos seletores) ... */
   },
+  retryConfig: {
+    maxTentativas: 3,
+    delayBase: 500
+  }
 };
 
 // Utilitários
@@ -59,10 +60,13 @@ const Utils = {
 // Cliente HTTP com Proxies
 class HttpClient {
   static async fetchComProxy(urlOriginal) {
+    const erros = [];
+
     for (const proxy of CONFIG.proxies) {
       try {
         const proxyUrl = proxy.url(urlOriginal);
         console.log(`Tentando proxy: ${proxy.name}`);
+        
         const response = await fetch(proxyUrl, {
           signal: AbortSignal.timeout(CONFIG.imagem.timeout),
         });
@@ -73,10 +77,12 @@ class HttpClient {
 
         return await response.text();
       } catch (error) {
+        erros.push({ proxy: proxy.name, error: error.message });
         console.warn(`Proxy ${proxy.name} falhou:`, error.message);
       }
     }
 
+    console.error('Todos os proxies falharam:', erros);
     throw new Error('Todos os proxies falharam');
   }
 }
@@ -84,6 +90,15 @@ class HttpClient {
 // Processamento de Notícias
 class NoticiaProcessor {
   static async buscarNoticiaPrincipal() {
+    try {
+      return await this.buscarNoticiaDeFontes();
+    } catch (error) {
+      console.error('Erro ao buscar notícias:', error);
+      return this.obterNoticiaFallback();
+    }
+  }
+
+  static async buscarNoticiaDeFontes() {
     const promessas = CONFIG.fontesNoticias.map(fonte => 
       this.buscarNoticiaDeFonte(fonte).catch(() => null)
     );
@@ -91,31 +106,45 @@ class NoticiaProcessor {
     const resultados = await Promise.all(promessas);
     const noticiaValida = resultados.find(n => n);
     
-    return noticiaValida || this.obterNoticiaFallback();
+    if (noticiaValida) {
+      return noticiaValida;
+    }
+
+    throw new Error('Nenhuma notícia encontrada');
   }
 
   static async buscarNoticiaDeFonte(fonte) {
-    const xmlText = await HttpClient.fetchComProxy(fonte.url);
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlText, 'application/xml');
-    
-    const item = doc.querySelector('item, entry');
-    if (!item) return null;
+    try {
+      const xmlText = await HttpClient.fetchComProxy(fonte.url);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlText, 'application/xml');
+      
+      // Validação do XML
+      if (!doc.querySelector('channel')) {
+        throw new Error('XML inválido: estrutura incorreta');
+      }
 
-    const titulo = item.querySelector('title')?.textContent?.trim();
-    const link = item.querySelector('link')?.textContent?.trim() || 
-                 item.querySelector('link')?.getAttribute('href');
-    
-    if (titulo && link) {
-      const resumo = this.gerarResumo(item.querySelector('description')?.textContent || '');
-      return {
-        titulo,
-        link,
-        fonte: fonte.nome,
-        resumo
-      };
+      const item = doc.querySelector('item, entry');
+      if (!item) return null;
+
+      const titulo = item.querySelector('title')?.textContent?.trim();
+      const link = item.querySelector('link')?.textContent?.trim() || 
+                   item.querySelector('link')?.getAttribute('href');
+      
+      if (titulo && link) {
+        const resumo = this.gerarResumo(item.querySelector('description')?.textContent || '');
+        return {
+          titulo,
+          link,
+          fonte: fonte.nome,
+          resumo
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error(`Erro ao processar RSS de ${fonte.url}:`, error);
+      return null;
     }
-    return null;
   }
 
   static gerarResumo(textoCompleto) {
@@ -148,6 +177,7 @@ class ImageGenerator {
     const fontesImagem = [
       `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${largura}&height=${altura}&nologo=true`,
       `https://source.unsplash.com/${largura}x${altura}/?news,brazil`,
+      `https://via.placeholder.com/${largura}x${altura}.png?text=Meme+Day`,
       CONFIG.imagem.placeholder,
     ];
 
