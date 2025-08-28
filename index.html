@@ -1,39 +1,385 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meme Day</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Meme Day - A notícia mais popular do dia com resumo inteligente e imagem gerada por IA">
+    <title>Meme Day - Notícia do Dia</title>
+    
+    <!-- Preconnect para otimizar carregamento -->
+    <link rel="preconnect" href="https://api.allorigins.win">
+    <link rel="preconnect" href="https://image.pollinations.ai">
+    
+    <style>
+        /* Reset e variáveis CSS */
+        :root {
+            --cor-primaria: #FF6B6B;
+            --cor-secundaria: #4ECDC4;
+            --cor-texto: #2D3436;
+            --cor-fundo: #F8F9FA;
+            --cor-card: #FFFFFF;
+            --sombra: 0 2px 10px rgba(0,0,0,0.1);
+            --transicao: all 0.3s ease;
+            --max-width: 1200px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--cor-fundo);
+            color: var(--cor-texto);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Container principal */
+        .container {
+            max-width: var(--max-width);
+            margin: 0 auto;
+            padding: 0 20px;
+            width: 100%;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--cor-primaria), var(--cor-secundaria));
+            color: white;
+            padding: 2rem 0;
+            box-shadow: var(--sombra);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header p {
+            text-align: center;
+            margin-top: 0.5rem;
+            opacity: 0.9;
+        }
+
+        /* Loading e erro */
+        .loading, .erro {
+            text-align: center;
+            padding: 2rem;
+            margin: 2rem 0;
+            border-radius: 10px;
+        }
+
+        .loading {
+            background: var(--cor-card);
+            box-shadow: var(--sombra);
+        }
+
+        .loading::after {
+            content: "...";
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: "."; }
+            40% { content: ".."; }
+            60% { content: "..."; }
+            80%, 100% { content: ""; }
+        }
+
+        .erro {
+            background: #FFE5E5;
+            color: #D63031;
+            border: 1px solid #FFCCCC;
+            display: none;
+        }
+
+        /* Conteúdo principal */
+        .conteudo {
+            flex: 1;
+            padding: 2rem 0;
+        }
+
+        .noticia-card {
+            background: var(--cor-card);
+            border-radius: 15px;
+            box-shadow: var(--sombra);
+            overflow: hidden;
+            margin-bottom: 2rem;
+            transition: var(--transicao);
+        }
+
+        .noticia-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        }
+
+        /* Imagem hero */
+        .imagem-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 aspect ratio */
+            overflow: hidden;
+            background: #f0f0f0;
+        }
+
+        .imagem-container img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: var(--transicao);
+        }
+
+        .imagem-container img[aria-busy="true"] {
+            filter: blur(5px);
+        }
+
+        /* Conteúdo da notícia */
+        .noticia-conteudo {
+            padding: 2rem;
+        }
+
+        .noticia-header {
+            margin-bottom: 1.5rem;
+        }
+
+        .noticia-titulo {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1.3;
+            margin-bottom: 1rem;
+            color: var(--cor-texto);
+        }
+
+        .noticia-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            font-size: 0.875rem;
+            color: #636E72;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .meta-item::before {
+            content: "•";
+            color: var(--cor-primaria);
+            font-weight: bold;
+        }
+
+        .meta-item:first-child::before {
+            content: "";
+        }
+
+        .noticia-resumo {
+            font-size: 1.125rem;
+            line-height: 1.7;
+            color: #2D3436;
+            margin-bottom: 1.5rem;
+        }
+
+        .noticia-link {
+            display: inline-block;
+            background: var(--cor-primaria);
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: var(--transicao);
+        }
+
+        .noticia-link:hover {
+            background: #FF5252;
+            transform: translateX(5px);
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--cor-texto);
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: auto;
+        }
+
+        .footer p {
+            opacity: 0.8;
+            font-size: 0.875rem;
+        }
+
+        /* Responsividade */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .noticia-titulo {
+                font-size: 1.5rem;
+            }
+
+            .noticia-conteudo {
+                padding: 1.5rem;
+            }
+
+            .noticia-meta {
+                font-size: 0.75rem;
+            }
+        }
+
+        /* Animações de entrada */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .noticia-card {
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        /* Skeleton loading */
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 4px;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton-titulo {
+            height: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .skeleton-texto {
+            height: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .skeleton-texto:last-child {
+            width: 80%;
+        }
+    </style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="container">
-      <h1 class="site-title">Meme Day</h1>
-      <p class="tagline">A notícia do dia... do nosso jeito</p>
-    </div>
-  </header>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1>🎯 Meme Day</h1>
+            <p>A notícia mais popular do momento com resumo inteligente</p>
+        </div>
+    </header>
 
-  <main class="container">
-    <section class="noticia">
-  <h2 class="titulo-noticia">Título da Notícia</h2>
-  <p class="fonte-noticia"></p>
-  <p class="data-noticia"></p>
-  <p class="resumo-noticia">Resumo curto da notícia...</p>
+    <!-- Conteúdo Principal -->
+    <main class="conteudo">
+        <div class="container">
+            <!-- Loading State -->
+            <div class="loading" data-element="carregando">
+                Carregando a notícia do dia
+            </div>
 
-  <div class="imagem-dia">
-    <img src="assets/images/imagem.png" alt="Imagem reestilizada da notícia do dia" />
-  </div>
+            <!-- Erro -->
+            <div class="erro" data-element="erro"></div>
 
-  <a href="#" class="link-fonte" target="_blank" rel="noopener">Ver notícia original</a>
-</section>
-  </main>
+            <!-- Card da Notícia -->
+            <article class="noticia-card" style="display: none;" id="noticia-principal">
+                <!-- Imagem Hero -->
+                <div class="imagem-container">
+                    <img 
+                        data-element="imagem" 
+                        src="assets/images/imagem.png" 
+                        alt="Imagem da notícia"
+                        loading="lazy"
+                    >
+                </div>
 
-  <footer class="site-footer">
-    <div class="container">
-      <p>© 2025 Meme Day — Projeto por Alex</p>
-      <p><a href="https://github.com/dedicatorias-web/Meme_day">Ver no GitHub</a></p>
-    </div>
-  </footer>
+                <!-- Conteúdo -->
+                <div class="noticia-conteudo">
+                    <header class="noticia-header">
+                        <h2 class="noticia-titulo" data-element="titulo">
+                            <span class="skeleton skeleton-titulo"></span>
+                        </h2>
+                        <div class="noticia-meta">
+                            <span class="meta-item">
+                                <strong>Fonte:</strong> 
+                                <span data-element="fonte"></span>
+                            </span>
+                            <span class="meta-item">
+                                <strong>Atualizado:</strong> 
+                                <span data-element="data-hora"></span>
+                            </span>
+                        </div>
+                    </header>
+
+                    <div class="noticia-resumo" data-element="resumo">
+                        <div class="skeleton skeleton-texto"></div>
+                        <div class="skeleton skeleton-texto"></div>
+                        <div class="skeleton skeleton-texto"></div>
+                    </div>
+
+                    <a 
+                        href="#" 
+                        class="noticia-link" 
+                        data-element="link-fonte"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        Ler notícia completa →
+                    </a>
+                </div>
+            </article>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Meme Day. Desenvolvido com ❤️ e IA</p>
+        </div>
+    </footer>
+
+    <!-- Script -->
+    <script src="script.js"></script>
+    
+    <!-- Script adicional para mostrar o card quando carregar -->
+    <script>
+        // Observador para mostrar o card quando o conteúdo for carregado
+        const observer = new MutationObserver((mutations) => {
+            const titulo = document.querySelector('[data-element="titulo"]');
+            if (titulo && titulo.textContent && !titulo.querySelector('.skeleton')) {
+                document.getElementById('noticia-principal').style.display = 'block';
+                observer.disconnect();
+            }
+        });
+
+        observer.observe(document.body, { 
+            childList: true, 
+            subtree: true,
+            characterData: true 
+        });
+    </script>
 </body>
 </html>
