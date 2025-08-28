@@ -2,20 +2,47 @@
 
 /**
  * Meme Day - Sistema de Notícias com Imagens Geradas por IA
- * Versão 4.0 - Otimizado para Desempenho e Resiliência
+ * Versão 5.0 - Otimizado para Desempenho e Resiliência
  */
 
 // Configurações Globais
 const CONFIG = {
+  // Proxies para contornar CORS
   proxies: [
-    { name: 'Proxy API', url: (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}` },
-    { name: 'CORS Proxy', url: (target) => `https://corsproxy.io/?${encodeURIComponent(target)}` }
+    { 
+      name: 'AllOrigins', 
+      url: (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}` 
+    },
+    { 
+      name: 'CORS Proxy', 
+      url: (target) => `https://corsproxy.io/?${encodeURIComponent(target)}` 
+    },
+    { 
+      name: 'ProxyServer', 
+      url: (target) => `https://proxy.cors.sh/?url=${encodeURIComponent(target)}` 
+    }
   ],
+
+  // Fontes de notícias
   fontesNoticias: [
-    { nome: 'Google News BR', url: 'https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419', tipo: 'rss' },
-    { nome: 'G1', url: 'https://g1.globo.com/rss/g1/', tipo: 'rss' },
-    { nome: 'BBC Brasil', url: 'https://www.bbc.com/portuguese/brasil/rss.xml', tipo: 'rss' }
+    { 
+      nome: 'Google News BR', 
+      url: 'https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419', 
+      tipo: 'rss' 
+    },
+    { 
+      nome: 'G1', 
+      url: 'https://g1.globo.com/rss/g1/', 
+      tipo: 'rss' 
+    },
+    { 
+      nome: 'BBC Brasil', 
+      url: 'https://www.bbc.com/portuguese/brasil/rss.xml', 
+      tipo: 'rss' 
+    }
   ],
+
+  // Notícias de fallback (quando todas as fontes falharem)
   fallbackNoticias: [
     {
       titulo: "Avanços na Energia Renovável no Brasil",
@@ -30,12 +57,16 @@ const CONFIG = {
       link: "https://www.google.com/search?q=ia+industrias+brasil"
     }
   ],
+
+  // Configurações de imagem
   imagem: {
     largura: 1280,
     altura: 720,
     timeout: 5000,
     placeholder: 'data:image/svg+xml,...' // SVG base64 para placeholder
   },
+
+  // Seletores DOM
   seletoresDOM: {
     titulo: '[data-element="titulo"]',
     resumo: '[data-element="resumo"]',
@@ -44,9 +75,11 @@ const CONFIG = {
     erro: '[data-element="erro"]',
     carregando: '[data-element="carregando"]'
   },
+
+  // Configurações de retry
   retryConfig: {
     maxTentativas: 3,
-    delayBase: 500
+    delayBase: 500 // ms
   }
 };
 
@@ -99,15 +132,20 @@ class HttpClient {
   }
 
   static async fetchComProxy(urlOriginal) {
+    const erros = [];
+
     for (const proxy of CONFIG.proxies) {
       try {
         const proxyUrl = proxy.url(urlOriginal);
         console.log(`Tentando proxy: ${proxy.name}`);
         return await this.fetchComRetry(proxyUrl);
       } catch (error) {
+        erros.push({ proxy: proxy.name, error: error.message });
         console.warn(`Proxy ${proxy.name} falhou:`, error.message);
       }
     }
+
+    console.error('Todos os proxies falharam:', erros);
     throw new Error('Todos os proxies falharam');
   }
 
@@ -176,14 +214,14 @@ class NoticiaProcessor {
   }
 
   static obterNoticiaFallback() {
-    const noticia = CONFIG.fallbackNoticias[
-      Math.floor(Math.random() * CONFIG.fallbackNoticias.length)
-    ];
-    
     return {
-      ...noticia,
+      ...Utils.escolherAleatorio(CONFIG.fallbackNoticias),
       isFallback: true
     };
+  }
+
+  static escolherAleatorio(array) {
+    return array[Math.floor(Math.random() * array.length)];
   }
 }
 
@@ -192,16 +230,23 @@ class ImageGenerator {
   static async gerarImagem(titulo, resumo) {
     const prompt = this.criarPrompt(titulo, resumo);
     const { largura, altura } = CONFIG.imagem;
-    
-    // Tenta Pollinations primeiro
-    try {
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${largura}&height=${altura}&nologo=true`;
-      await this.verificarURL(url);
-      return url;
-    } catch {
-      // Fallback para Unsplash
-      return `https://source.unsplash.com/${largura}x${altura}/?news,illustration`;
+
+    const fontesImagem = [
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${largura}&height=${altura}&nologo=true`,
+      `https://source.unsplash.com/${largura}x${altura}/?news,brazil`,
+      CONFIG.imagem.placeholder
+    ];
+
+    for (const url of fontesImagem) {
+      try {
+        await this.verificarURL(url);
+        return url;
+      } catch {
+        continue;
+      }
     }
+
+    throw new Error('Não foi possível gerar imagem');
   }
 
   static criarPrompt(titulo, resumo) {
@@ -215,13 +260,13 @@ class ImageGenerator {
   static async verificarURL(url) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
-    
+
     try {
       const response = await fetch(url, { 
         method: 'HEAD',
         signal: controller.signal 
       });
-      
+
       clearTimeout(timeoutId);
       if (!response.ok) throw new Error('Imagem indisponível');
     } catch (error) {
@@ -320,17 +365,17 @@ class MemeDayApp {
 document.addEventListener('DOMContentLoaded', () => {
   const app = new MemeDayApp();
   app.iniciar();
-  
-  // Auto-refresh a cada 10 minutos (opcional)
-  setInterval(() => {
-    if (document.visibilityState === 'visible') {
-      app.iniciar();
-    }
-  }, 10 * 60 * 1000);
 });
 
-// Service Worker para cache (opcional)
+// Service Worker (opcional)
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js')
-    .catch(err => console.error('Service Worker falhou:', err));
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('ServiceWorker registrado com sucesso:', registration.scope);
+      })
+      .catch(err => {
+        console.error('Falha no registro do ServiceWorker:', err);
+      });
+  });
 }
