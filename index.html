@@ -6,9 +6,12 @@
     <meta name="description" content="Meme Day - A notícia mais popular do dia com resumo inteligente e imagem gerada por IA">
     <title>Meme Day - Notícia do Dia</title>
     
+    <!-- Favicon inline para evitar 404 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+    
     <!-- Preconnect para otimizar carregamento -->
-    <link rel="preconnect" href="https://api.allorigins.win">
     <link rel="preconnect" href="https://image.pollinations.ai">
+    <link rel="preconnect" href="https://api.codetabs.com">
     
     <style>
         /* Reset e variáveis CSS */
@@ -100,6 +103,12 @@
             display: none;
         }
 
+        .erro small {
+            display: block;
+            margin-top: 0.5rem;
+            opacity: 0.8;
+        }
+
         /* Conteúdo principal */
         .conteudo {
             flex: 1;
@@ -189,6 +198,7 @@
             line-height: 1.7;
             color: #2D3436;
             margin-bottom: 1.5rem;
+            white-space: pre-line;
         }
 
         .noticia-link {
@@ -219,6 +229,31 @@
         .footer p {
             opacity: 0.8;
             font-size: 0.875rem;
+        }
+
+        /* Skeleton loading */
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 4px;
+            color: transparent;
+            user-select: none;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton.skeleton-titulo {
+            height: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .skeleton.skeleton-texto {
+            height: 1rem;
+            margin-bottom: 0.5rem;
         }
 
         /* Responsividade */
@@ -256,31 +291,22 @@
             animation: fadeIn 0.6s ease-out;
         }
 
-        /* Skeleton loading */
-        .skeleton {
-            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-            background-size: 200% 100%;
-            animation: loading 1.5s infinite;
-            border-radius: 4px;
+        /* Botão de recarregar */
+        .btn-recarregar {
+            background: var(--cor-secundaria);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            margin-top: 1rem;
+            transition: var(--transicao);
         }
 
-        @keyframes loading {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-
-        .skeleton-titulo {
-            height: 2rem;
-            margin-bottom: 1rem;
-        }
-
-        .skeleton-texto {
-            height: 1rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .skeleton-texto:last-child {
-            width: 80%;
+        .btn-recarregar:hover {
+            background: #45B7AA;
+            transform: scale(1.05);
         }
     </style>
 </head>
@@ -298,7 +324,7 @@
         <div class="container">
             <!-- Loading State -->
             <div class="loading" data-element="carregando">
-                Carregando a notícia do dia
+                Buscando as últimas notícias
             </div>
 
             <!-- Erro -->
@@ -310,7 +336,7 @@
                 <div class="imagem-container">
                     <img 
                         data-element="imagem" 
-                        src="assets/images/imagem.png" 
+                        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1280 720'%3E%3Crect fill='%23f0f0f0' width='1280' height='720'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' fill='%23999' font-family='Arial' font-size='24'%3EMeme Day%3C/text%3E%3C/svg%3E" 
                         alt="Imagem da notícia"
                         loading="lazy"
                     >
@@ -319,25 +345,23 @@
                 <!-- Conteúdo -->
                 <div class="noticia-conteudo">
                     <header class="noticia-header">
-                        <h2 class="noticia-titulo" data-element="titulo">
-                            <span class="skeleton skeleton-titulo"></span>
+                        <h2 class="noticia-titulo skeleton skeleton-titulo" data-element="titulo">
+                            Carregando título...
                         </h2>
                         <div class="noticia-meta">
                             <span class="meta-item">
                                 <strong>Fonte:</strong> 
-                                <span data-element="fonte"></span>
+                                <span data-element="fonte">...</span>
                             </span>
                             <span class="meta-item">
                                 <strong>Atualizado:</strong> 
-                                <span data-element="data-hora"></span>
+                                <span data-element="data-hora">...</span>
                             </span>
                         </div>
                     </header>
 
-                    <div class="noticia-resumo" data-element="resumo">
-                        <div class="skeleton skeleton-texto"></div>
-                        <div class="skeleton skeleton-texto"></div>
-                        <div class="skeleton skeleton-texto"></div>
+                    <div class="noticia-resumo skeleton skeleton-texto" data-element="resumo">
+                        Carregando resumo...
                     </div>
 
                     <a 
@@ -351,6 +375,13 @@
                     </a>
                 </div>
             </article>
+
+            <!-- Botão de recarregar (aparece em caso de erro) -->
+            <div style="text-align: center; display: none;" id="container-recarregar">
+                <button class="btn-recarregar" onclick="location.reload()">
+                    🔄 Tentar novamente
+                </button>
+            </div>
         </div>
     </main>
 
@@ -358,28 +389,29 @@
     <footer class="footer">
         <div class="container">
             <p>&copy; 2024 Meme Day. Desenvolvido com ❤️ e IA</p>
+            <p style="font-size: 0.75rem; margin-top: 0.5rem;">
+                Notícias agregadas de fontes públicas
+            </p>
         </div>
     </footer>
 
     <!-- Script -->
     <script src="script.js"></script>
     
-    <!-- Script adicional para mostrar o card quando carregar -->
+    <!-- Script para mostrar botão de recarregar em caso de erro -->
     <script>
-        // Observador para mostrar o card quando o conteúdo for carregado
-        const observer = new MutationObserver((mutations) => {
-            const titulo = document.querySelector('[data-element="titulo"]');
-            if (titulo && titulo.textContent && !titulo.querySelector('.skeleton')) {
-                document.getElementById('noticia-principal').style.display = 'block';
-                observer.disconnect();
+        const erroEl = document.querySelector('[data-element="erro"]');
+        const recarregarEl = document.getElementById('container-recarregar');
+        
+        const observer = new MutationObserver(() => {
+            if (erroEl && erroEl.style.display !== 'none') {
+                recarregarEl.style.display = 'block';
+            } else {
+                recarregarEl.style.display = 'none';
             }
         });
-
-        observer.observe(document.body, { 
-            childList: true, 
-            subtree: true,
-            characterData: true 
-        });
+        
+        observer.observe(erroEl, { attributes: true, attributeFilter: ['style'] });
     </script>
 </body>
 </html>
