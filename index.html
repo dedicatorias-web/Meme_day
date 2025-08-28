@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Meme Day - A notícia mais popular do dia com resumo inteligente e imagem gerada por IA">
+    <meta name="keywords" content="notícias, brasil, resumo, IA, meme day">
+    <meta name="author" content="Meme Day">
+    <meta property="og:title" content="Meme Day - Notícia do Dia">
+    <meta property="og:description" content="A notícia mais popular do momento com resumo inteligente">
+    <meta property="og:type" content="website">
+    
     <title>Meme Day - Notícia do Dia</title>
     
     <!-- Favicon inline para evitar 404 -->
@@ -13,302 +19,8 @@
     <link rel="preconnect" href="https://image.pollinations.ai">
     <link rel="preconnect" href="https://api.codetabs.com">
     
-    <style>
-        /* Reset e variáveis CSS */
-        :root {
-            --cor-primaria: #FF6B6B;
-            --cor-secundaria: #4ECDC4;
-            --cor-texto: #2D3436;
-            --cor-fundo: #F8F9FA;
-            --cor-card: #FFFFFF;
-            --sombra: 0 2px 10px rgba(0,0,0,0.1);
-            --transicao: all 0.3s ease;
-            --max-width: 1200px;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background-color: var(--cor-fundo);
-            color: var(--cor-texto);
-            line-height: 1.6;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Container principal */
-        .container {
-            max-width: var(--max-width);
-            margin: 0 auto;
-            padding: 0 20px;
-            width: 100%;
-        }
-
-        /* Header */
-        .header {
-            background: linear-gradient(135deg, var(--cor-primaria), var(--cor-secundaria));
-            color: white;
-            padding: 2rem 0;
-            box-shadow: var(--sombra);
-        }
-
-        .header h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            text-align: center;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .header p {
-            text-align: center;
-            margin-top: 0.5rem;
-            opacity: 0.9;
-        }
-
-        /* Loading e erro */
-        .loading, .erro {
-            text-align: center;
-            padding: 2rem;
-            margin: 2rem 0;
-            border-radius: 10px;
-        }
-
-        .loading {
-            background: var(--cor-card);
-            box-shadow: var(--sombra);
-        }
-
-        .loading::after {
-            content: "...";
-            animation: dots 1.5s steps(4, end) infinite;
-        }
-
-        @keyframes dots {
-            0%, 20% { content: "."; }
-            40% { content: ".."; }
-            60% { content: "..."; }
-            80%, 100% { content: ""; }
-        }
-
-        .erro {
-            background: #FFE5E5;
-            color: #D63031;
-            border: 1px solid #FFCCCC;
-            display: none;
-        }
-
-        .erro small {
-            display: block;
-            margin-top: 0.5rem;
-            opacity: 0.8;
-        }
-
-        /* Conteúdo principal */
-        .conteudo {
-            flex: 1;
-            padding: 2rem 0;
-        }
-
-        .noticia-card {
-            background: var(--cor-card);
-            border-radius: 15px;
-            box-shadow: var(--sombra);
-            overflow: hidden;
-            margin-bottom: 2rem;
-            transition: var(--transicao);
-        }
-
-        .noticia-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
-        }
-
-        /* Imagem hero */
-        .imagem-container {
-            position: relative;
-            width: 100%;
-            padding-top: 56.25%; /* 16:9 aspect ratio */
-            overflow: hidden;
-            background: #f0f0f0;
-        }
-
-        .imagem-container img {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transition: var(--transicao);
-        }
-
-        .imagem-container img[aria-busy="true"] {
-            filter: blur(5px);
-        }
-
-        /* Conteúdo da notícia */
-        .noticia-conteudo {
-            padding: 2rem;
-        }
-
-        .noticia-header {
-            margin-bottom: 1.5rem;
-        }
-
-        .noticia-titulo {
-            font-size: 1.75rem;
-            font-weight: 700;
-            line-height: 1.3;
-            margin-bottom: 1rem;
-            color: var(--cor-texto);
-        }
-
-        .noticia-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            font-size: 0.875rem;
-            color: #636E72;
-        }
-
-        .meta-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .meta-item::before {
-            content: "•";
-            color: var(--cor-primaria);
-            font-weight: bold;
-        }
-
-        .meta-item:first-child::before {
-            content: "";
-        }
-
-        .noticia-resumo {
-            font-size: 1.125rem;
-            line-height: 1.7;
-            color: #2D3436;
-            margin-bottom: 1.5rem;
-            white-space: pre-line;
-        }
-
-        .noticia-link {
-            display: inline-block;
-            background: var(--cor-primaria);
-            color: white;
-            padding: 0.75rem 2rem;
-            border-radius: 30px;
-            text-decoration: none;
-            font-weight: 500;
-            transition: var(--transicao);
-        }
-
-        .noticia-link:hover {
-            background: #FF5252;
-            transform: translateX(5px);
-        }
-
-        /* Footer */
-        .footer {
-            background: var(--cor-texto);
-            color: white;
-            text-align: center;
-            padding: 2rem 0;
-            margin-top: auto;
-        }
-
-        .footer p {
-            opacity: 0.8;
-            font-size: 0.875rem;
-        }
-
-        /* Skeleton loading */
-        .skeleton {
-            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-            background-size: 200% 100%;
-            animation: loading 1.5s infinite;
-            border-radius: 4px;
-            color: transparent;
-            user-select: none;
-        }
-
-        @keyframes loading {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-
-        .skeleton.skeleton-titulo {
-            height: 2rem;
-            margin-bottom: 1rem;
-        }
-
-        .skeleton.skeleton-texto {
-            height: 1rem;
-            margin-bottom: 0.5rem;
-        }
-
-        /* Responsividade */
-        @media (max-width: 768px) {
-            .header h1 {
-                font-size: 2rem;
-            }
-
-            .noticia-titulo {
-                font-size: 1.5rem;
-            }
-
-            .noticia-conteudo {
-                padding: 1.5rem;
-            }
-
-            .noticia-meta {
-                font-size: 0.75rem;
-            }
-        }
-
-        /* Animações de entrada */
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .noticia-card {
-            animation: fadeIn 0.6s ease-out;
-        }
-
-        /* Botão de recarregar */
-        .btn-recarregar {
-            background: var(--cor-secundaria);
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            margin-top: 1rem;
-            transition: var(--transicao);
-        }
-
-        .btn-recarregar:hover {
-            background: #45B7AA;
-            transform: scale(1.05);
-        }
-    </style>
+    <!-- CSS -->
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <!-- Header -->
@@ -377,7 +89,7 @@
             </article>
 
             <!-- Botão de recarregar (aparece em caso de erro) -->
-            <div style="text-align: center; display: none;" id="container-recarregar">
+            <div class="container-recarregar" id="container-recarregar">
                 <button class="btn-recarregar" onclick="location.reload()">
                     🔄 Tentar novamente
                 </button>
@@ -389,13 +101,13 @@
     <footer class="footer">
         <div class="container">
             <p>&copy; 2024 Meme Day. Desenvolvido com ❤️ e IA</p>
-            <p style="font-size: 0.75rem; margin-top: 0.5rem;">
+            <p class="footer-subtitle">
                 Notícias agregadas de fontes públicas
             </p>
         </div>
     </footer>
 
-    <!-- Script -->
+    <!-- Scripts -->
     <script src="script.js"></script>
     
     <!-- Script para mostrar botão de recarregar em caso de erro -->
