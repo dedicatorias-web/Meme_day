@@ -1,12 +1,16 @@
-// Verifica se o Service Worker está disponível e o arquivo existe
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(registration => {
-        console.log('ServiceWorker registrado com sucesso:', registration.scope);
-      })
-      .catch(err => {
-        console.error('Falha no registro do ServiceWorker:', err);
-      });
-  });
-}
+// sw.js
+console.log('Service Worker carregado');
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open('v1')
+      .then((cache) => cache.addAll(['/', '/index.html', '/style.css', '/script.js']))
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => response || fetch(event.request))
+  );
+});
