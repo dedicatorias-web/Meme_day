@@ -1,48 +1,16 @@
 "use strict";
 
-/**
- * Meme Day - Sistema de Notícias com Imagens Geradas por IA
- * Versão 5.0 - Otimizado para Desempenho e Resiliência
- */
-
 // Configurações Globais
 const CONFIG = {
-  // Proxies para contornar CORS
   proxies: [
-    { 
-      name: 'AllOrigins', 
-      url: (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}` 
-    },
-    { 
-      name: 'CORS Proxy', 
-      url: (target) => `https://corsproxy.io/?${encodeURIComponent(target)}` 
-    },
-    { 
-      name: 'ProxyServer', 
-      url: (target) => `https://proxy.cors.sh/?url=${encodeURIComponent(target)}` 
-    }
+    { name: 'AllOrigins', url: (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}` },
+    { name: 'CORS Proxy', url: (target) => `https://corsproxy.io/?${encodeURIComponent(target)}` },
   ],
-
-  // Fontes de notícias
   fontesNoticias: [
-    { 
-      nome: 'Google News BR', 
-      url: 'https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419', 
-      tipo: 'rss' 
-    },
-    { 
-      nome: 'G1', 
-      url: 'https://g1.globo.com/rss/g1/', 
-      tipo: 'rss' 
-    },
-    { 
-      nome: 'BBC Brasil', 
-      url: 'https://www.bbc.com/portuguese/brasil/rss.xml', 
-      tipo: 'rss' 
-    }
+    { nome: 'Google News BR', url: 'https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419', tipo: 'rss' },
+    { nome: 'G1', url: 'https://g1.globo.com/rss/g1/', tipo: 'rss' },
+    { nome: 'BBC Brasil', url: 'https://www.bbc.com/portuguese/brasil/rss.xml', tipo: 'rss' },
   ],
-
-  // Notícias de fallback (quando todas as fontes falharem)
   fallbackNoticias: [
     {
       titulo: "Avanços na Energia Renovável no Brasil",
@@ -50,23 +18,14 @@ const CONFIG = {
       fonte: "Meme Day Archive",
       link: "https://www.google.com/search?q=energia+renovavel+brasil+2024"
     },
-    {
-      titulo: "Inteligência Artificial Transformando Indústrias",
-      resumo: "Empresas brasileiras adotam IA para revolucionar processos produtivos e serviços.",
-      fonte: "Meme Day Archive",
-      link: "https://www.google.com/search?q=ia+industrias+brasil"
-    }
+    // ... (outros fallbacks) ...
   ],
-
-  // Configurações de imagem
   imagem: {
     largura: 1280,
     altura: 720,
     timeout: 5000,
     placeholder: 'data:image/svg+xml,...' // SVG base64 para placeholder
   },
-
-  // Seletores DOM
   seletoresDOM: {
     titulo: '[data-element="titulo"]',
     resumo: '[data-element="resumo"]',
@@ -75,12 +34,6 @@ const CONFIG = {
     erro: '[data-element="erro"]',
     carregando: '[data-element="carregando"]'
   },
-
-  // Configurações de retry
-  retryConfig: {
-    maxTentativas: 3,
-    delayBase: 500 // ms
-  }
 };
 
 // Utilitários
@@ -101,70 +54,30 @@ const Utils = {
               .replace(/&[^;]+;/g, '')
               .trim();
   },
-
-  normalizarTexto(texto) {
-    return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  }
 };
 
-// Cliente HTTP com Retry e Proxies
+// Cliente HTTP com Proxies
 class HttpClient {
-  static async fetchComRetry(url, options = {}, tentativas = 0) {
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: AbortSignal.timeout(CONFIG.imagem.timeout)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      return await response.text();
-    } catch (error) {
-      if (tentativas < CONFIG.retryConfig.maxTentativas - 1) {
-        const delay = CONFIG.retryConfig.delayBase * (2 ** tentativas);
-        await Utils.sleep(delay);
-        return this.fetchComRetry(url, options, tentativas + 1);
-      }
-      throw error;
-    }
-  }
-
   static async fetchComProxy(urlOriginal) {
-    const erros = [];
-
     for (const proxy of CONFIG.proxies) {
       try {
         const proxyUrl = proxy.url(urlOriginal);
         console.log(`Tentando proxy: ${proxy.name}`);
-        return await this.fetchComRetry(proxyUrl);
+        const response = await fetch(proxyUrl, {
+          signal: AbortSignal.timeout(CONFIG.imagem.timeout),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        return await response.text();
       } catch (error) {
-        erros.push({ proxy: proxy.name, error: error.message });
         console.warn(`Proxy ${proxy.name} falhou:`, error.message);
       }
     }
 
-    console.error('Todos os proxies falharam:', erros);
     throw new Error('Todos os proxies falharam');
-  }
-
-  static async fetchRSS(url) {
-    try {
-      const xmlText = await this.fetchComProxy(url);
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(xmlText, 'application/xml');
-      
-      // Verifica erros de parsing
-      if (doc.querySelector('parsererror')) {
-        throw new Error('XML inválido');
-      }
-      
-      return doc;
-    } catch (error) {
-      console.error(`Erro ao buscar RSS de ${url}:`, error);
-      return null;
-    }
   }
 }
 
@@ -182,9 +95,10 @@ class NoticiaProcessor {
   }
 
   static async buscarNoticiaDeFonte(fonte) {
-    const doc = await HttpClient.fetchRSS(fonte.url);
-    if (!doc) return null;
-
+    const xmlText = await HttpClient.fetchComProxy(fonte.url);
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'application/xml');
+    
     const item = doc.querySelector('item, entry');
     if (!item) return null;
 
@@ -193,7 +107,7 @@ class NoticiaProcessor {
                  item.querySelector('link')?.getAttribute('href');
     
     if (titulo && link) {
-      const resumo = await this.gerarResumo(item.querySelector('description')?.textContent || '');
+      const resumo = this.gerarResumo(item.querySelector('description')?.textContent || '');
       return {
         titulo,
         link,
@@ -204,7 +118,7 @@ class NoticiaProcessor {
     return null;
   }
 
-  static async gerarResumo(textoCompleto) {
+  static gerarResumo(textoCompleto) {
     const textoLimpo = Utils.limparHTML(textoCompleto);
     const frases = textoLimpo.split('. ')
                             .filter(f => f.length > 40)
@@ -234,7 +148,7 @@ class ImageGenerator {
     const fontesImagem = [
       `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${largura}&height=${altura}&nologo=true`,
       `https://source.unsplash.com/${largura}x${altura}/?news,brazil`,
-      CONFIG.imagem.placeholder
+      CONFIG.imagem.placeholder,
     ];
 
     for (const url of fontesImagem) {
@@ -280,9 +194,6 @@ class ImageGenerator {
 class UIController {
   constructor() {
     this.elementos = this.inicializarElementos();
-    this.estado = {
-      imagemCarregada: false
-    };
   }
 
   inicializarElementos() {
@@ -311,16 +222,12 @@ class UIController {
     this.elementos.resumo.textContent = noticia.resumo;
     this.elementos.fonte.textContent = `${noticia.fonte}${noticia.isFallback ? ' (Arquivo)' : ''}`;
     
-    // Carrega imagem apenas uma vez
-    if (!this.estado.imagemCarregada) {
-      try {
-        const urlImagem = await ImageGenerator.gerarImagem(noticia.titulo, noticia.resumo);
-        await this.carregarImagem(urlImagem);
-        this.estado.imagemCarregada = true;
-      } catch (error) {
-        console.warn('Usando imagem padrão:', error);
-        this.elementos.imagem.src = CONFIG.imagem.placeholder;
-      }
+    try {
+      const urlImagem = await ImageGenerator.gerarImagem(noticia.titulo, noticia.resumo);
+      await this.carregarImagem(urlImagem);
+    } catch (error) {
+      console.warn('Usando imagem padrão:', error);
+      this.elementos.imagem.src = CONFIG.imagem.placeholder;
     }
   }
 
@@ -366,6 +273,3 @@ document.addEventListener('DOMContentLoaded', () => {
   const app = new MemeDayApp();
   app.iniciar();
 });
-
-// Service Worker (opcional)
-
