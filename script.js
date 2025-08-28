@@ -1,3 +1,6 @@
+// ------------------------------
+// Utilitários de Texto
+// ------------------------------
 function limparTexto(html) {
   return html
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
@@ -8,9 +11,12 @@ function limparTexto(html) {
 }
 
 function gerarResumoInteligente(texto, numFrases = 3) {
-  const stopwords = ["de","da","do","em","para","com","que","um","uma","os","as","e","o","a","no","na","por","se","ao","dos","das"];
+  const stopwords = [
+    "de","da","do","em","para","com","que","um","uma","os","as","e","o","a","no",
+    "na","por","se","ao","dos","das","é","foi","são","ser","tem","há"
+  ];
   const frases = texto.split(/(?<=[.!?])\s+/);
-  
+
   // Conta frequência de palavras
   const freq = {};
   frases.forEach(frase => {
@@ -39,6 +45,20 @@ function gerarResumoInteligente(texto, numFrases = 3) {
   return melhores.join(" ");
 }
 
+// ------------------------------
+// Utilitários de Data
+// ------------------------------
+function formatarDataHora() {
+  const agora = new Date();
+  return agora.toLocaleString("pt-BR", {
+    dateStyle: "full",
+    timeStyle: "short"
+  });
+}
+
+// ------------------------------
+// Funções para busca de notícias
+// ------------------------------
 async function fetchRSS(url) {
   try {
     const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
@@ -66,7 +86,8 @@ async function getTopNewsBR() {
         console.log(`Fonte usada: ${fonte.nome}`);
         return {
           titulo: item.querySelector("title").textContent,
-          link: item.querySelector("link").textContent
+          link: item.querySelector("link").textContent,
+          fonte: fonte.nome
         };
       }
     }
@@ -86,13 +107,18 @@ async function gerarResumoDaNoticia(url) {
   }
 }
 
-// Atualiza o HTML do Meme Day
+// ------------------------------
+// Execução principal
+// ------------------------------
 (async () => {
   const noticia = await getTopNewsBR();
   if (noticia) {
     document.querySelector(".titulo-noticia").textContent = noticia.titulo;
     document.querySelector(".link-fonte").href = noticia.link;
-    document.querySelector(".resumo-noticia").textContent = await gerarResumoDaNoticia(noticia.link);
+    document.querySelector(".fonte-noticia").textContent = noticia.fonte;
+    document.querySelector(".data-noticia").textContent = formatarDataHora();
+    document.querySelector(".resumo-noticia").textContent =
+      await gerarResumoDaNoticia(noticia.link);
   } else {
     document.querySelector(".titulo-noticia").textContent =
       "Não foi possível carregar a notícia do dia";
