@@ -1,19 +1,22 @@
 "use strict";
 
-/* ============================================================================
-   Meme Day — script.js (v6.1)
-   - Busca a notícia top via RSS (com proxies e timeouts curtos)
-   - Extrai texto legível via r.jina.ai (CORS liberado) e resume
-   - Atualiza UI com título, fonte, data/hora, resumo e imagem (1x)
-   - Modo DEMO automático quando rede/proxies falham
-   - Muitos logs para facilitar debug
-   ============================================================================ */
+/* =============================================================================
+   Meme Day — script.js (v7)
+   Metas:
+   - Buscar notícia via RSS (com proxies e timeouts curtos)
+   - Se o feed for Google News, extrair o link original do <description>
+   - Ler texto legível via r.jina.ai (sem CORS) e gerar resumo inteligente
+   - Atualizar UI (título, fonte, data/hora, resumo) e imagem (carregamento 1x)
+   - Modo DEMO automático quando tudo falhar
+   - Logs detalhados em cada etapa para facilitar diagnóstico
+   Sem Service Worker.
+   ========================================================================== */
 
 
 /* =============================================================================
    [PARTE 0] BANNER / DIAGNÓSTICO INICIAL
    ========================================================================== */
-console.log("%c[MemeDay] 🚀 Iniciando app v6.1", "background:#222;color:#0ff;padding:2px 6px;border-radius:3px");
+console.log("%c[MemeDay] 🚀 Iniciando app v7", "background:#222;color:#0ff;padding:2px 6px;border-radius:3px");
 console.log("[MemeDay] Ambiente:", {
   href: location.href,
   userAgent: navigator.userAgent,
@@ -28,27 +31,28 @@ const CONFIG = {
   // Forçar modo demo via ?mode=demo
   mode: new URLSearchParams(location.search).get("mode") || "auto",
 
-  // Fontes de RSS
+  // Fontes RSS (ordem de prioridade)
   fontes: [
-    { nome: "Google News BR", url: "https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419", tipo: "rss" },
-    { nome: "G1",            url: "https://g1.globo.com/rss/g1/",                                   tipo: "rss" },
-    { nome: "BBC Brasil",    url: "https://www.bbc.com/portuguese/brasil/rss.xml",                 tipo: "rss" }
+    { nome: "Google News BR", url: "https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419", tipo: "rss", tipoEspecial: "google-news" },
+    { nome: "G1",             url: "https://g1.globo.com/rss/g1/",                                   tipo: "rss" },
+    { nome: "BBC Brasil",     url: "https://www.bbc.com/portuguese/brasil/rss.xml",                 tipo: "rss" }
   ],
 
-  // Proxies para contornar CORS (ordem de tentativa)
+  // Proxies para contornar CORS (tentados em ordem)
   proxies: [
     { name: "AllOrigins (raw)", url: (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}` },
     { name: "corsproxy.io",     url: (target) => `https://corsproxy.io/?${encodeURIComponent(target)}` }
+    // Se tiver um proxy próprio estável, adicione aqui.
   ],
 
-  // Timeouts
+  // Timeouts por operação (ms)
   timeouts: {
-    proxyFetch: 2500,     // por tentativa de proxy (ms)
-    readableFetch: 5000,  // r.jina.ai (ms)
-    imageHead: 3000       // verificação de imagem (ms)
+    proxyFetch: 2500,     // por tentativa de proxy
+    readableFetch: 5000,  // r.jina.ai
+    imageLoad: 6000       // carregar imagem (cada candidato)
   },
 
-  // Imagem
+  // Imagens
   imagem: {
     largura: 1280,
     altura: 720,
@@ -67,7 +71,7 @@ const CONFIG = {
     )}`
   },
 
-  // Notícias demo (fallback)
+  // Fallback demo quando tudo falha
   demoNoticias: [
     {
       titulo: "Brasil amplia capacidade de energia solar em 2025",
@@ -100,7 +104,7 @@ const Log = {
 
 
 /* =============================================================================
-   [PARTE 3] UTILITÁRIOS GERAIS (tempo, limpeza, resumo)
+   [PARTE 3] UTILITÁRIOS (tempo, texto, resumo, keywords)
    ========================================================================== */
 const Utils = {
   sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
@@ -122,10 +126,9 @@ const Utils = {
       .trim();
   },
 
-  // Resumo por ranqueamento simples de frases (frequência de palavras)
   summarize(text, maxSentences = 3) {
     if (!text) return "Resumo indisponível no momento.";
-    const MAX_CHARS = 6000; // limita custo
+    const MAX_CHARS = 6000;
     text = Utils.cleanHTML(text).slice(0, MAX_CHARS);
     const sentences = text.split(/(?<=[.!?])\s+/).filter(s => s.length > 25);
 
@@ -169,199 +172,27 @@ const Utils = {
 
     const out = top.join(" ").trim();
     return /[.!?]$/.test(out) ? out : out + ".";
+  },
+
+  // Gera até 5 keywords curtas do título para usar na busca de imagem
+  titleKeywords(titulo) {
+    if (!titulo) return ["news", "brazil"];
+    const base = titulo
+      .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter(x => x.length >= 3 && !["the","and","for","com","uma","para","que","com","dos","das","nos","nas","das","uma","uma","uma"].includes(x));
+    const uniq = [...new Set(base)];
+    const top = uniq.slice(0, 5);
+    if (top.length === 0) top.push("news","brazil");
+    return top;
   }
 };
 
 
 /* =============================================================================
-   [PARTE 4] REDE (fetch com proxies e parsing XML)
-   ========================================================================== */
-const Net = {
-  async fetchText(url, timeoutMs) {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.text();
-    } finally {
-      clearTimeout(t);
-    }
-  },
-
-  async fetchViaProxies(url) {
-    const errors = [];
-    for (const proxy of CONFIG.proxies) {
-      try {
-        console.log(`[MemeDay] Tentando proxy: ${proxy.name} →`, proxy.url(url));
-        const text = await this.fetchText(proxy.url(url), CONFIG.timeouts.proxyFetch);
-        console.log("[MemeDay] Proxy OK:", proxy.name, `(bytes: ${text.length})`);
-        return text;
-      } catch (err) {
-        errors.push({ proxy: proxy.name, err: String(err) });
-        console.warn(`[MemeDay] Proxy ${proxy.name} falhou:`, String(err));
-      }
-    }
-    console.error("[MemeDay] Todos os proxies falharam:", errors);
-    throw new Error("Todos os proxies falharam");
-  },
-
-  parseXML(xmlText) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlText, "application/xml");
-    if (doc.querySelector("parsererror")) throw new Error("XML inválido");
-    return doc;
-  },
-
-  // Leitor legível (sem CORS) via r.jina.ai
-  async fetchReadablePage(originalUrl) {
-    try {
-      const u = new URL(originalUrl);
-      const jinaURL = `https://r.jina.ai/http://${u.host}${u.pathname}${u.search}`;
-      console.log("[MemeDay] r.jina.ai:", jinaURL);
-      return await this.fetchText(jinaURL, CONFIG.timeouts.readableFetch);
-    } catch (err) {
-      console.warn("[MemeDay] r.jina.ai falhou:", String(err));
-      return "";
-    }
-  }
-};
-
-
-/* =============================================================================
-   [PARTE 5] FONTES / BUSCA DE NOTÍCIAS (RSS → item top)
-   ========================================================================== */
-const Sources = {
-  async getTopNews() {
-    for (const fonte of CONFIG.fontes) {
-      Log.group(`Buscando feed: ${fonte.nome}`, () => {});
-      try {
-        const xmlText = await Net.fetchViaProxies(fonte.url);
-        const doc = Net.parseXML(xmlText);
-
-        // Suporta RSS/Atom
-        const item = doc.querySelector("item") || doc.querySelector("entry");
-        if (!item) {
-          Log.warn(`Nenhum item no feed: ${fonte.nome}`);
-          continue;
-        }
-
-        const titulo = item.querySelector("title")?.textContent?.trim() || "Notícia";
-        const link =
-          item.querySelector("link[href]")?.getAttribute("href")?.trim() // Atom
-          || item.querySelector("link")?.textContent?.trim()             // RSS
-          || "";
-
-        if (!/^https?:\/\//i.test(link)) {
-          Log.warn("Link inválido no feed; ignorando item.", { titulo, link });
-          continue;
-        }
-
-        Log.info("Top item:", { fonte: fonte.nome, titulo, link });
-        return { titulo, link, fonte: fonte.nome };
-      } catch (err) {
-        Log.warn(`Falha no feed ${fonte.nome}:`, String(err));
-      }
-    }
-    return null;
-  }
-};
-
-
-/* =============================================================================
-   [PARTE 6] ARTIGO / RESUMO
-   ========================================================================== */
-const Article = {
-  async buildSummary(link) {
-    // 1) Tenta texto legível via r.jina.ai
-    const readable = await Net.fetchReadablePage(link);
-    if (readable && readable.length > 120) {
-      Log.info("Texto via r.jina.ai (chars):", readable.length);
-      return Utils.summarize(readable, 3);
-    }
-
-    // 2) Fallback: tenta pegar HTML bruto via proxies e resumir
-    try {
-      const html = await Net.fetchViaProxies(link);
-      const text = Utils.cleanHTML(html);
-      if (text && text.length > 120) {
-        Log.info("Texto via proxies (chars):", text.length);
-        return Utils.summarize(text, 3);
-      }
-    } catch (err) {
-      Log.warn("Falha ao obter página via proxies:", String(err));
-    }
-
-    // 3) Último recurso
-    return "Resumo indisponível no momento. Acesse o link para ler a notícia completa.";
-  }
-};
-
-
-/* =============================================================================
-   [PARTE 7] IMAGEM (gera URL e carrega 1x)
-   ========================================================================== */
-const ImageService = {
-  async generateURL(titulo) {
-    const terms = encodeURIComponent(`${titulo} news illustration`);
-    const { largura: W, altura: H } = CONFIG.imagem;
-
-    const candidates = [
-      `https://source.unsplash.com/${W}x${H}/?${terms}`,
-      `https://picsum.photos/${W}/${H}?random=${Date.now()}`
-    ];
-
-    for (const url of candidates) {
-      try {
-        await this.head(url, CONFIG.timeouts.imageHead);
-        Log.info("Imagem válida:", url);
-        return url;
-      } catch (err) {
-        Log.warn("Imagem indisponível, tentando outra:", url, String(err));
-      }
-    }
-
-    return CONFIG.imagem.placeholder;
-  },
-
-  async head(url, timeoutMs) {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      // Em no-cors, não há acesso a status; se não errar, consideramos OK
-      await fetch(url, { method: "HEAD", mode: "no-cors", signal: controller.signal });
-      return true;
-    } finally {
-      clearTimeout(t);
-    }
-  },
-
-  async loadInto(imgEl, url, alt) {
-    return new Promise((resolve, reject) => {
-      imgEl.setAttribute("aria-busy", "true");
-      imgEl.style.opacity = "0.85";
-      imgEl.alt = alt || "Imagem da notícia";
-
-      const img = new Image();
-      img.onload = () => {
-        imgEl.src = url;
-        imgEl.style.opacity = "1";
-        imgEl.removeAttribute("aria-busy");
-        resolve();
-      };
-      img.onerror = (e) => {
-        imgEl.style.opacity = "1";
-        imgEl.removeAttribute("aria-busy");
-        reject(e);
-      };
-      img.src = url;
-    });
-  }
-};
-
-
-/* =============================================================================
-   [PARTE 8] UI (DOM, estados, preenchimento)
+   [PARTE 4] UI (DOM, estados, preenchimento)
    ========================================================================== */
 const UI = (() => {
   const els = {
@@ -416,16 +247,61 @@ const UI = (() => {
     if (els.resumo) els.resumo.textContent = texto || "Resumo indisponível.";
   }
 
-  async function setImageOnce(url, alt) {
+  async function setImageOnce(urls, alt) {
+    // urls: array de candidatos em ordem de preferência
     if (imageSet || !els.imagem) return;
     imageSet = true;
-    try {
-      await ImageService.loadInto(els.imagem, url, alt);
-    } catch (err) {
-      Log.warn("Falha ao carregar imagem principal, usando placeholder:", err);
-      els.imagem.src = CONFIG.imagem.placeholder;
-      els.imagem.alt = "Imagem padrão do Meme Day";
+
+    els.imagem.setAttribute("aria-busy", "true");
+    els.imagem.style.opacity = "0.85";
+    els.imagem.alt = alt || "Imagem da notícia";
+
+    for (const url of urls) {
+      const ok = await tryLoad(els.imagem, url, CONFIG.timeouts.imageLoad);
+      if (ok) {
+        Log.info("Imagem aplicada com sucesso:", url);
+        els.imagem.style.opacity = "1";
+        els.imagem.removeAttribute("aria-busy");
+        return;
+      } else {
+        Log.warn("Falha ao carregar candidato de imagem, tentando próximo:", url);
+      }
     }
+
+    // Se nenhum candidato funcionou, usa placeholder
+    Log.warn("Nenhuma imagem carregou. Usando placeholder.");
+    els.imagem.src = CONFIG.imagem.placeholder;
+    els.imagem.style.opacity = "1";
+    els.imagem.removeAttribute("aria-busy");
+  }
+
+  function tryLoad(imgEl, url, timeoutMs) {
+    return new Promise(resolve => {
+      const img = new Image();
+      let done = false;
+
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        img.onload = img.onerror = null;
+        resolve(false);
+      }, timeoutMs);
+
+      img.onload = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        imgEl.src = url;
+        resolve(true);
+      };
+      img.onerror = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(false);
+      };
+      img.src = url;
+    });
   }
 
   return { status, showLoading, showError, hideError, fillBasicInfo, fillResumo, setImageOnce };
@@ -433,71 +309,27 @@ const UI = (() => {
 
 
 /* =============================================================================
-   [PARTE 9] PIPELINE PRINCIPAL (orquestra a sequência)
+   [PARTE 5] REDE (fetch via proxies, parsing de XML, r.jina.ai)
    ========================================================================== */
-async function runMemeDay() {
-  UI.hideError();
-  UI.showLoading(true);
-  UI.status("Inicializando...");
-
-  // Modo DEMO forçado via query string
-  if (CONFIG.mode.toLowerCase() === "demo") {
-    Log.info("Modo DEMO forçado (?mode=demo).");
-    const noticia = pickDemoNews();
-    UI.fillBasicInfo(noticia);
-    UI.fillResumo(noticia.resumo);
-    const urlImg = await ImageService.generateURL(noticia.titulo);
-    await UI.setImageOnce(urlImg, `Imagem: ${noticia.titulo}`);
-    UI.showLoading(false);
-    return;
-  }
-
-  try {
-    UI.status("Buscando notícia principal (RSS)...");
-    const noticia = await Sources.getTopNews();
-
-    if (!noticia) {
-      Log.warn("Nenhum feed disponível. Ativando modo DEMO automático.");
-      const demo = pickDemoNews();
-      UI.fillBasicInfo(demo);
-      UI.fillResumo(demo.resumo);
-      const urlImg = await ImageService.generateURL(demo.titulo);
-      await UI.setImageOnce(urlImg, `Imagem: ${demo.titulo}`);
-      UI.showLoading(false);
-      return;
+const Net = {
+  async fetchText(url, timeoutMs) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.text();
+    } finally {
+      clearTimeout(t);
     }
+  },
 
-    // Preenche título/fonte/link/data imediatamente
-    UI.fillBasicInfo(noticia);
-
-    // Gera resumo
-    UI.status("Gerando resumo da notícia...");
-    const resumo = await Article.buildSummary(noticia.link);
-    UI.fillResumo(resumo);
-
-    // Imagem (somente 1 vez)
-    UI.status("Gerando imagem da notícia...");
-    const urlImg = await ImageService.generateURL(noticia.titulo);
-    await UI.setImageOnce(urlImg, `Imagem: ${noticia.titulo}`);
-
-  } catch (err) {
-    UI.showError("Não foi possível carregar a notícia do dia. Verifique sua conexão e tente novamente.");
-    Log.error("Falha no pipeline principal:", err);
-  } finally {
-    UI.showLoading(false);
-  }
-}
-
-function pickDemoNews() {
-  const arr = CONFIG.demoNoticias;
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-
-/* =============================================================================
-   [PARTE 10] BOOTSTRAP
-   ========================================================================== */
-document.addEventListener("DOMContentLoaded", () => {
-  Log.info("DOM pronto. Iniciando Meme Day.");
-  runMemeDay();
-});
+  async fetchViaProxies(url) {
+    const errors = [];
+    for (const proxy of CONFIG.proxies) {
+      try {
+        Log.info(`Tentando proxy: ${proxy.name} →`, proxy.url(url));
+        const text = await this.fetchText(proxy.url(url), CONFIG.timeouts.proxyFetch);
+        Log.info("Proxy OK:", proxy.name, `(bytes: ${text.length})`);
+        return text;
+      } catch (err) {
