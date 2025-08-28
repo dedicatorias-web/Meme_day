@@ -130,3 +130,20 @@ body {
   .site-title { font-size: 1.8rem; }
   .titulo-noticia { font-size: 1.6rem; }
 }
+
+.fonte-noticia, .data-noticia {
+  font-size: 0.9rem;
+  color: #777;
+  margin: 0;
+}
+
+.fonte-noticia::before {
+  content: "Fonte: ";
+  font-weight: 600;
+}
+
+.data-noticia::before {
+  content: "Atualizado em: ";
+  font-weight: 600;
+}
+
