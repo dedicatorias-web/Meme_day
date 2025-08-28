@@ -481,3 +481,56 @@ async function runMemeDay() {
     await UI.setImageOnce(urlImg, `Imagem: ${noticia.titulo}`);
     UI.showLoading(false);
     return;
+  }
+
+  try {
+    UI.status("Buscando notícia principal (RSS)...");
+    const noticia = await Sources.getTopNews();
+
+    if (!noticia) {
+      // Entra em modo demo automático
+      Log.warn("Nenhuma fonte funcionou. Ativando modo DEMO automático.");
+      const demo = pickDemoNews();
+      UI.fillBasicInfo(demo);
+      UI.fillResumo(demo.resumo);
+      const urlImg = await ImageService.generateURL(demo.titulo);
+      await UI.setImageOnce(urlImg, `Imagem: ${demo.titulo}`);
+      UI.showLoading(false);
+      return;
+    }
+
+    // Preenche informações básicas imediatamente
+    UI.fillBasicInfo(noticia);
+
+    // Busca resumo
+    UI.status("Gerando resumo da notícia...");
+    const resumo = await Article.buildSummary(noticia.link);
+    UI.fillResumo(resumo);
+
+    // Gera e aplica imagem (uma vez)
+    UI.status("Gerando imagem da notícia...");
+    const urlImg = await ImageService.generateURL(noticia.titulo);
+    await UI.setImageOnce(urlImg, `Imagem: ${noticia.titulo}`);
+
+  } catch (err) {
+    UI.showError("Não foi possível carregar a notícia do dia. Verifique sua conexão e tente novamente.");
+    Log.error("Falha no pipeline principal:", err);
+  } finally {
+    UI.showLoading(false);
+  }
+}
+
+function pickDemoNews() {
+  const arr = CONFIG.demoNoticias;
+  const item = arr[Math.floor(Math.random() * arr.length)];
+  return { ...item, fonte: item.fonte || "Meme Day (Demo)" };
+}
+
+
+/* =============================================================================
+   [PARTE 10] BOOTSTRAP (DOMContentLoaded)
+   ========================================================================== */
+document.addEventListener("DOMContentLoaded", () => {
+  Log.info("DOM pronto. Iniciando fluxo principal.");
+  runMemeDay();
+});
